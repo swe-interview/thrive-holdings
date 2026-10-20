@@ -4,14 +4,12 @@
 """
 
 import argparse
-import json
 import os
 from pathlib import Path
 
 from openai import OpenAI
 
-from preprocess.ocr import ocr_pdf
-from preprocess.segment import segment_pages
+from preprocess import preprocess_pdf
 
 
 def main(argv: list[str] | None = None) -> None:
@@ -27,17 +25,10 @@ def main(argv: list[str] | None = None) -> None:
 
     client = OpenAI()
     for pdf_path in args.pdfs:
-        if not pdf_path.is_file():
-            raise SystemExit(f"PDF not found: {pdf_path}")
-        stem_dir = args.out / pdf_path.stem
-        print(f"{pdf_path.name}: segmenting", flush=True)
-        pages = ocr_pdf(pdf_path, stem_dir / "pages")
-        result = segment_pages(pages, client=client, model=args.model)
-        payload = {"source": pdf_path.name, **result}
-        out_path = stem_dir / "segments.json"
-        out_path.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
-        ranges = ", ".join(f"{seg['start_page']}-{seg['end_page']}" for seg in result["segments"])
-        print(f"{pdf_path.name}: {ranges} -> {out_path}", flush=True)
+        try:
+            preprocess_pdf(pdf_path, args.out, client=client, model=args.model)
+        except FileNotFoundError as exc:
+            raise SystemExit(str(exc)) from exc
 
 
 def _load_dotenv(path: Path = Path(".env")) -> None:

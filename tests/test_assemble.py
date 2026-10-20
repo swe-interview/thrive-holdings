@@ -107,6 +107,37 @@ class AssembleTests(unittest.TestCase):
             [section.name for section in template.sections],
         )
 
+    def test_titled_segment_is_the_bookmark(self) -> None:
+        assemble(
+            [self.a, self.b],
+            [
+                (
+                    Segment(
+                        text="w2",
+                        source="a.pdf",
+                        start_page=1,
+                        end_page=1,
+                        title="W-2  Wenatchee Valley College (1 page)",
+                    ),
+                    section_named("Wages"),
+                )
+            ],
+            self.dest,
+        )
+
+        document = pymupdf.open(self.dest)
+        try:
+            toc = document.get_toc()
+        finally:
+            document.close()
+
+        self.assertEqual(child_page(toc, "Wages", "W-2  Wenatchee Valley College (1 page)"), 1)
+        loaded = load_workpaper(self.dest)
+        wages = next(section for section in loaded.sections if section.name == "Wages")
+        self.assertEqual(wages.documents[0].document_type, "W-2")
+        self.assertEqual(wages.documents[0].issuer, "Wenatchee Valley College")
+        self.assertEqual(wages.documents[0].labeled_page_count, 1)
+
     def test_segments_from_preprocess_joins_ocr_pages(self) -> None:
         root = Path(self.tmp.name) / "out" / "a"
         pages = root / "pages"

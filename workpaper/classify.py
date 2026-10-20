@@ -107,10 +107,16 @@ def classify_segments(
     """Classify each segment with its own model call."""
     packet = workpaper if workpaper is not None else default_workpaper()
     openai_client = _client(client)
-    return [
-        classify_segment(segment, client=openai_client, model=model, workpaper=packet)
-        for segment in segments
-    ]
+    results = []
+    for index, segment in enumerate(segments, start=1):
+        print(
+            f"  classify {index}/{len(segments)} {segment.source} pp. {segment.start_page}-{segment.end_page}",
+            flush=True,
+        )
+        results.append(
+            classify_segment(segment, client=openai_client, model=model, workpaper=packet)
+        )
+    return results
 
 
 def default_workpaper() -> Workpaper:

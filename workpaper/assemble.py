@@ -1,8 +1,10 @@
 """Concatenate source PDFs in scan order and write the workpaper bookmark outline.
 
 Level-1 bookmarks are the sections from schema.py, in table-of-contents order.
-Level-2 bookmarks are classified segments. Empty sections stay in the outline
-and point at page 1.
+Level-2 bookmarks are named source documents, such as
+"W-2  Wenatchee Valley College (1 page)" or "Dividends  Robinhood (4 pages)".
+Contiguous pieces of the same packet are merged before those bookmarks are written.
+Empty sections stay in the outline and point at page 1.
 """
 
 from __future__ import annotations
@@ -56,7 +58,9 @@ def assemble(
 
 
 def bookmark_title(segment: Segment) -> str:
-    """Level-2 label. Preprocess and classify do not emit a document title."""
+    """Level-2 label. Named segments already carry a form-and-issuer title."""
+    if segment.title:
+        return segment.title
     source = Path(segment.source or "").name
     start = segment.start_page
     end = segment.end_page if segment.end_page is not None else start
@@ -108,7 +112,8 @@ def main(argv: list[str] | None = None) -> None:
     )
     args = parser.parse_args(argv)
 
-    from workpaper.classify import classify_segments
+    from workpaper.classify import classify_segments, default_workpaper
+    from workpaper.name import FiledSegment, label_segments, merge_related
 
     segments: list[Segment] = []
     for pdf_path in args.pdfs:
@@ -119,11 +124,21 @@ def main(argv: list[str] | None = None) -> None:
         except FileNotFoundError as exc:
             raise SystemExit(str(exc)) from exc
 
+    print(f"classifying {len(segments)} segments", flush=True)
     classifications = classify_segments(segments)
-    filed = [
-        (segment, classification.section)
-        for segment, classification in zip(segments, classifications, strict=True)
-    ]
+    print("naming segments", flush=True)
+    labels = label_segments(segments)
+    lookup = {section.name: section for section in default_workpaper().sections}
+    filed = merge_related(
+        [
+            FiledSegment(segment, classification.section, label)
+            for segment, classification, label in zip(segments, classifications, labels, strict=True)
+        ],
+        lookup,
+    )
+    print("outline:", flush=True)
+    for segment, section in filed:
+        print(f"  {section.name}: {bookmark_title(segment)}", flush=True)
     assemble(args.pdfs, filed, args.dest)
     print(f"wrote {args.dest}", flush=True)
 
